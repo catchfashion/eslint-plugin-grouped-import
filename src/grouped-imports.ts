@@ -1,18 +1,16 @@
 import { Rule } from "eslint";
 import { ImportDeclaration, SourceLocation } from "estree";
 import _ from "lodash";
+import minimatch from "minimatch";
 
 type GroupedImports = {
   [k: string]: ImportDeclaration[];
 };
 
-interface RuleOption {
-  path: string;
-}
-
-type RuleOptions = {
-  [k: string]: RuleOption[];
-};
+type RuleOptions = Array<{
+  groupName: string;
+  pathPatterns: string[];
+}>;
 
 export const ruleMessages = {
   noComments: "Imports must be accompanied by comments",
@@ -29,16 +27,17 @@ const rule: Rule.RuleModule = {
     fixable: "code",
     schema: [
       {
-        type: "object",
-        patternProperties: {
-          "^.*$": {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                path: {
-                  type: "string",
-                },
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            groupName: {
+              type: "string",
+            },
+            pathPatterns: {
+              type: "array",
+              items: {
+                type: "string",
               },
             },
           },
@@ -59,27 +58,11 @@ const rule: Rule.RuleModule = {
           ) as ImportDeclaration[];
 
           // check if there are imports from config
-          const optionValues = _.flatMap(options, (values) =>
-            _.map(values, (v) => v.path)
-          );
-          const hasConfigImports = _.some(importNodes, (node) => {
-            return _.some(optionValues, (v: string) =>
-              _.includes(node.source.value as string, v)
-            );
-          });
-
-          if (!hasConfigImports) {
-            return;
-          }
 
           const importComments = node.comments ? node.comments : [];
-          const importsByGroup = getImportsByGroup(
-            options,
-            optionValues,
-            importNodes
-          );
+          const importsByGroup = getImportsByGroup(options, importNodes);
 
-          const commentKeys = _.keys(options);
+          const commentKeys = options.map(({ groupName }) => groupName);
           const sourceCode = context.getSourceCode();
           const lines = sourceCode.lines;
           const lastImportNode = importNodes[importNodes.length - 1];
@@ -348,38 +331,18 @@ const rule: Rule.RuleModule = {
 
 const getImportsByGroup = (
   options: RuleOptions,
-  allOptionsPaths: string[],
   importNodes: ImportDeclaration[]
 ): GroupedImports => {
-  return _.reduce(
-    options,
-    (acc, option, key) => {
-      const groupPaths = _.map(option, (o) => o.path);
-      const filteredImports = _.filter(importNodes, (node) => {
-        return _.some(groupPaths, (groupPath) => {
-          // check if there's a more specific path in option values
-          const similarOptionValue = _.find(
-            allOptionsPaths,
-            (optionValue) =>
-              _.includes(optionValue, groupPath) && optionValue !== groupPath
-          );
-          const importValue = node.source.value as string;
-          const regularImport = _.includes(importValue, groupPath);
-          const similarImport =
-            _.includes(importValue, similarOptionValue) ||
-            (/\.\w/gi.test(importValue) && !/\.\w/gi.test(groupPath));
-
-          return regularImport && !similarImport;
-        });
-      });
-
-      return {
-        ...acc,
-        [key]: filteredImports,
-      };
-    },
-    {}
-  );
+  return _.omit(_.groupBy(importNodes, (node) => {
+    const importValue = node.source.value as string;
+    const matchedGroup = options.find(({ pathPatterns }) =>
+      pathPatterns.some((pattern) => minimatch(importValue, pattern))
+    );
+    if (matchedGroup) {
+      return matchedGroup.groupName;
+    }
+    return "ungrouped" as const;
+  }), "ungrouped");
 };
 
 const composeNewCodeLines = (
