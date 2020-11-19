@@ -6,15 +6,10 @@ const tester = new RuleTester({ parserOptions: { ecmaVersion: 2015, sourceType: 
 
 const ruleOptions = [
   [
-    { groupName: "CatchModule", pathPatterns: ["@catchfashion"] },
-    { groupName: "CatchVariation", pathPatterns: ["CATCH"] },
-    { groupName: "Contexts", pathPatterns: ["contexts/**/*"] },
-    { groupName: "Hooks", pathPatterns: ["hooks/**/*"] },
-    { groupName: "Services", pathPatterns: ["services/**/*"] },
-    { groupName: "Models", pathPatterns: ["models/**/*"] },
-    { groupName: "Helpers", pathPatterns: ["helpers/**/*"] },
+    { groupName: "Contexts", pathPatterns: ["contexts/**"] },
+    { groupName: "Hooks", pathPatterns: ["hooks/**"] },
     { groupName: "Assets", pathPatterns: ["**/*.{svg|jpg|jpeg}",] },
-    { groupName: "Components", pathPatterns: ["components/**/*"] },
+    { groupName: "Components", pathPatterns: ["components/**/*", "../**", "./**"] },
   ]
 ];
 
@@ -63,40 +58,29 @@ import c from 'contexts/someContext';
   });
 };
 
-/* 
-const runSequentialImportsTest = () => {
-  tester.run('Test sequentialImports rule', rule, {
+const runSequentialItemsTest = () => {
+  tester.run('Test sequentialItems rule', rule, {
     valid: [],
     invalid: [
       {
         code: `
-// api
-import {
-  uploadCandidateFile,
-  removeCandidateFile,
-  downloadCandidateFile,
-} from 'api/candidate';
-
-// api, selectors
-import select from 'selectors/main';
+// Components
+import s from "components/someSiblingPathComponent";
+import p from "components/someParentPathComponent";
+import g from "components/someGlobalComponent";
       `,
         options: ruleOptions,
-        errors: [{ message: messages.sequentialImports }],
+        errors: [{ message: messages.sequentialItems }],
         output: `
-// api
-// api, selectors
-import {
-  uploadCandidateFile,
-  removeCandidateFile,
-  downloadCandidateFile,
-} from 'api/candidate';
-import select from 'selectors/main';
+// Components
+import g from "components/someGlobalComponent";
+import p from "components/someParentPathComponent";
+import s from "components/someSiblingPathComponent";
       `,
       }
     ],
   });
 };
-*/
 
 const runFirstImportTest = () => {
   tester.run('Test firstImport rule', rule, {
@@ -217,7 +201,7 @@ import u from "hooks/someHook";
 (() => {
   runNoCommentsTest();
   runNoGroupCommentTest();
-  // runSequentialImportsTest();
+  runSequentialItemsTest();
   runWithoutGroupTest();
   runFirstImportTest();
   runEmptyLineAfterTest();

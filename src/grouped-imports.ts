@@ -3,9 +3,10 @@ import { ImportDeclaration, SourceLocation } from "estree";
 import _ from "lodash";
 import minimatch from "minimatch";
 
-type GroupedImports = {
-  [k: string]: ImportDeclaration[];
-};
+type ImportGroups = Array<{
+  groupName: string;
+  imports: ImportDeclaration[];
+}>;
 
 type RuleOptions = Array<{
   groupName: string;
@@ -15,7 +16,7 @@ type RuleOptions = Array<{
 export const ruleMessages = {
   noComments: "Imports must be accompanied by comments",
   noGroupComment: 'No comment found for import group "{{comment}}"',
-  sequentialImports: "All imports in a group must be sequential",
+  sequentialItems: "All import items in a group must be sequential",
   firstImport: "First import in a group must be preceded by a group comment",
   emptyLineBefore: "Import group comment must be preceded by an empty line",
   emptyLineAfter: "Last import in a group must be followed by an empty line",
@@ -60,7 +61,7 @@ const rule: Rule.RuleModule = {
           // check if there are imports from config
 
           const importComments = node.comments ? node.comments : [];
-          const importsByGroup = getImportsByGroup(options, importNodes);
+          const importGroups = getImportsByGroup(options, importNodes);
 
           const commentKeys = options.map(({ groupName }) => groupName);
           const sourceCode = context.getSourceCode();
@@ -89,14 +90,13 @@ const rule: Rule.RuleModule = {
               node,
               messageId: "noComments",
               fix: (fixer) => {
-                const fixes = _.map(
-                  importsByGroup,
-                  (group: ImportDeclaration[], commentKey) => {
-                    if (_.isEmpty(group)) {
+                const fixes = importGroups.map(
+                  ({ imports, groupName: commentKey }) => {
+                    if (_.isEmpty(imports)) {
                       return;
                     }
 
-                    const firstImport = group[0];
+                    const firstImport = imports[0];
                     if (!firstImport.loc || !firstImport.range) {
                       return;
                     }
@@ -114,8 +114,8 @@ const rule: Rule.RuleModule = {
             return;
           }
 
-          _.some(importsByGroup, (group: ImportDeclaration[], commentKey) => {
-            if (_.isEmpty(group)) {
+          importGroups.some(({ imports, groupName: commentKey }) => {
+            if (_.isEmpty(imports)) {
               return false;
             }
 
@@ -123,8 +123,8 @@ const rule: Rule.RuleModule = {
               importComments,
               (c) => c.value.trim() === commentKey
             );
-            const firstImport = group[0];
-            const lastGroupImport = group[group.length - 1];
+            const firstImport = imports[0];
+            const lastGroupImport = imports[imports.length - 1];
 
             const firstGroupImportLine = (firstImport.loc as SourceLocation)
               .start.line;
@@ -149,7 +149,7 @@ const rule: Rule.RuleModule = {
             }
 
             const groupImportTextRanges: [number, number][] = [];
-            const allGroupImportTexts = _.flatMap(group, (g) => {
+            const allGroupImportTexts = _.flatMap(imports, (g) => {
               const start = (g.loc as SourceLocation).start.line - 1;
               const end = (g.loc as SourceLocation).end.line;
               groupImportTextRanges.push([start, end - 1]);
@@ -157,7 +157,7 @@ const rule: Rule.RuleModule = {
             });
 
             // sum up expected lines (support for multiline imports)
-            const expectedLinesSum = _.sumBy(group, (g) => {
+            const expectedLinesSum = _.sumBy(imports, (g) => {
               const start = (g.loc as SourceLocation).start.line;
 
               // include eslint-disable comment in the overall line count
@@ -177,7 +177,7 @@ const rule: Rule.RuleModule = {
             if (expectedLines !== lastGroupImportLine) {
               context.report({
                 node: lastGroupImport,
-                messageId: "sequentialImports",
+                messageId: "sequentialItem",
                 fix: (fixer) => {
                   const insertAt = (importComment.loc as SourceLocation).end
                     .line;
@@ -268,7 +268,7 @@ const rule: Rule.RuleModule = {
               return true;
             }
 
-            const importsWithGroup = _.flatMap(importsByGroup, (g) => g);
+            const importsWithGroup = _.flatMap(importGroups, (g) => g.imports);
             const importsWithoutGroup = _.xor(importNodes, importsWithGroup);
 
             // find first group comment, don't count other comments
@@ -332,8 +332,9 @@ const rule: Rule.RuleModule = {
 const getImportsByGroup = (
   options: RuleOptions,
   importNodes: ImportDeclaration[]
-): GroupedImports => {
-  return _.omit(_.groupBy(importNodes, (node) => {
+): ImportGroups => {
+  const importGroupMap = new Map<string, ImportDeclaration[]>(options.map(({groupName}) => [groupName, []]));
+  _(importNodes).groupBy((node) => {
     const importValue = node.source.value as string;
     const matchedGroup = options.find(({ pathPatterns }) =>
       pathPatterns.some((pattern) => minimatch(importValue, pattern))
@@ -341,8 +342,14 @@ const getImportsByGroup = (
     if (matchedGroup) {
       return matchedGroup.groupName;
     }
-    return "ungrouped" as const;
-  }), "ungrouped");
+    return "ungrouped";
+  }).omit("ungrouped").forEach((imports, groupName) => {
+    importGroupMap.set(groupName, imports)
+  });
+  return Array.from(importGroupMap).map(([groupName, imports]) => ({
+    groupName,
+    imports,
+  }));
 };
 
 const composeNewCodeLines = (
