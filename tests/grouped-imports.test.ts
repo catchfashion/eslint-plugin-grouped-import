@@ -63,19 +63,19 @@ const runSequentialItemsTest = () => {
     valid: [],
     invalid: [
       {
-        code: `
-// Components
-import s from "components/someSiblingPathComponent";
-import p from "components/someParentPathComponent";
+        code:
+`// Components
+import s from "./someSiblingPathComponent";
+import p from "../shared/someParentPathComponent";
 import g from "components/someGlobalComponent";
       `,
         options: ruleOptions,
         errors: [{ message: messages.sequentialItems }],
-        output: `
-// Components
+        output: 
+`// Components
 import g from "components/someGlobalComponent";
-import p from "components/someParentPathComponent";
-import s from "components/someSiblingPathComponent";
+import p from "../shared/someParentPathComponent";
+import s from "./someSiblingPathComponent";
       `,
       }
     ],

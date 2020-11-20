@@ -5,7 +5,10 @@ import minimatch from "minimatch";
 
 type ImportGroups = Array<{
   groupName: string;
-  imports: ImportDeclaration[];
+  imports: {
+    node: ImportDeclaration;
+    pathPriority: number; // 0 is first
+  }[];
 }>;
 
 type RuleOptions = Array<{
@@ -96,7 +99,7 @@ const rule: Rule.RuleModule = {
                       return;
                     }
 
-                    const firstImport = imports[0];
+                    const firstImport = imports[0].node;
                     if (!firstImport.loc || !firstImport.range) {
                       return;
                     }
@@ -123,8 +126,8 @@ const rule: Rule.RuleModule = {
               importComments,
               (c) => c.value.trim() === commentKey
             );
-            const firstImport = imports[0];
-            const lastGroupImport = imports[imports.length - 1];
+            const firstImport = imports[0].node;
+            const lastGroupImport = imports[imports.length - 1].node;
 
             const firstGroupImportLine = (firstImport.loc as SourceLocation)
               .start.line;
@@ -148,36 +151,22 @@ const rule: Rule.RuleModule = {
               return true;
             }
 
+            const unsequentialItem = imports.find((next, index, array) => {
+              return index !== 0 && array[index - 1].pathPriority > next.pathPriority;
+            })
+
             const groupImportTextRanges: [number, number][] = [];
-            const allGroupImportTexts = _.flatMap(imports, (g) => {
-              const start = (g.loc as SourceLocation).start.line - 1;
-              const end = (g.loc as SourceLocation).end.line;
+            const allGroupImportTexts = _.flatMap(unsequentialItem ? _.sortBy(imports, g => g.pathPriority) : imports, (g) => {
+              const start = (g.node.loc as SourceLocation).start.line - 1;
+              const end = (g.node.loc as SourceLocation).end.line;
               groupImportTextRanges.push([start, end - 1]);
               return lines.slice(start, end);
             });
 
-            // sum up expected lines (support for multiline imports)
-            const expectedLinesSum = _.sumBy(imports, (g) => {
-              const start = (g.loc as SourceLocation).start.line;
-
-              // include eslint-disable comment in the overall line count
-              const gComment = _.find(
-                importComments,
-                (c) => (c.loc as SourceLocation).start.line === start - 1
-              );
-              const disableLintComment =
-                gComment && _.includes(gComment.value, "eslint-disable");
-
-              const gEnd = (g.loc as SourceLocation).end.line;
-              const end = disableLintComment ? gEnd + 1 : gEnd;
-              return end - start + 1;
-            });
-
-            const expectedLines = firstGroupImportLine + expectedLinesSum - 1;
-            if (expectedLines !== lastGroupImportLine) {
+            if (unsequentialItem) {
               context.report({
-                node: lastGroupImport,
-                messageId: "sequentialItem",
+                node: unsequentialItem.node,
+                messageId: "sequentialItems",
                 fix: (fixer) => {
                   const insertAt = (importComment.loc as SourceLocation).end
                     .line;
@@ -191,6 +180,7 @@ const rule: Rule.RuleModule = {
                     fixer.removeRange([0, lastImportNodeRangeEnd]),
                     fixer.insertTextAfterRange([0, 0], newLines.join("\n")),
                   ];
+                  console.log(fixes);
 
                   return fixes;
                 },
@@ -268,7 +258,7 @@ const rule: Rule.RuleModule = {
               return true;
             }
 
-            const importsWithGroup = _.flatMap(importGroups, (g) => g.imports);
+            const importsWithGroup = _.flatMap(importGroups, (g) => g.imports.map(({node}) => node));
             const importsWithoutGroup = _.xor(importNodes, importsWithGroup);
 
             // find first group comment, don't count other comments
@@ -333,23 +323,51 @@ const getImportsByGroup = (
   options: RuleOptions,
   importNodes: ImportDeclaration[]
 ): ImportGroups => {
-  const importGroupMap = new Map<string, ImportDeclaration[]>(options.map(({groupName}) => [groupName, []]));
-  _(importNodes).groupBy((node) => {
-    const importValue = node.source.value as string;
-    const matchedGroup = options.find(({ pathPatterns }) =>
-      pathPatterns.some((pattern) => minimatch(importValue, pattern))
-    );
-    if (matchedGroup) {
-      return matchedGroup.groupName;
+  const importGroupMap = new Map<
+    string,
+    {
+      node: ImportDeclaration;
+      pathPriority: number;
+    }[]
+  >(options.map(({ groupName }) => [groupName, []]));
+
+  function addItemToGroup(
+    groupName: string,
+    item: {
+      node: ImportDeclaration;
+      pathPriority: number;
     }
-    return "ungrouped";
-  }).omit("ungrouped").forEach((imports, groupName) => {
-    importGroupMap.set(groupName, imports)
+  ) {
+    const prevImports = importGroupMap.get(groupName);
+    if (!prevImports) {
+      // never
+    } else {
+      importGroupMap.set(groupName, [...prevImports, item]);
+    }
+  }
+
+  importNodes.forEach((node) => {
+    const importValue = node.source.value as string;
+    _.some(options, ({ groupName, pathPatterns }) => {
+      return pathPatterns.some((pattern, pathPriority) => {
+        if (minimatch(importValue, pattern)) {
+          addItemToGroup(groupName, {
+            node,
+            pathPriority,
+          });
+          return true;
+        }
+        return false;
+      });
+    });
   });
-  return Array.from(importGroupMap).map(([groupName, imports]) => ({
-    groupName,
-    imports,
-  }));
+
+  return Array.from(importGroupMap)
+    .map(([groupName, imports]) => ({
+      groupName,
+      imports,
+    }))
+    .filter(({ imports }) => imports.length > 0);
 };
 
 const composeNewCodeLines = (
