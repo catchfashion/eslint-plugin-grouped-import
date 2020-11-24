@@ -5,6 +5,7 @@ import minimatch from "minimatch";
 
 type ImportGroups = Array<{
   groupName: string;
+  groupPriority: number; // 0 is first
   imports: {
     node: ImportDeclaration;
     pathPriority: number; // 0 is first
@@ -19,6 +20,7 @@ type RuleOptions = Array<{
 export const ruleMessages = {
   noComments: "Imports must be accompanied by comments",
   noGroupComment: 'No comment found for import group "{{comment}}"',
+  sequentialGroups: "All import groups must be sequential",
   sequentialItems: "All import items in a group must be sequential",
   firstImport: "First import in a group must be preceded by a group comment",
   emptyLineBefore: "Import group comment must be preceded by an empty line",
@@ -117,7 +119,7 @@ const rule: Rule.RuleModule = {
             return;
           }
 
-          importGroups.some(({ imports, groupName: commentKey }) => {
+          importGroups.some(({ imports, groupPriority, groupName: commentKey }, importGroupIndex) => {
             if (_.isEmpty(imports)) {
               return false;
             }
@@ -151,8 +153,36 @@ const rule: Rule.RuleModule = {
               return true;
             }
 
-            const unsequentialItem = imports.find((next, index, array) => {
-              return index !== 0 && array[index - 1].pathPriority > next.pathPriority;
+            const prevImportGroup = importGroups[importGroupIndex - 1];
+            if (importGroupIndex !== 0 && prevImportGroup.groupPriority > groupPriority) {
+              context.report({
+                node: firstImport,
+                messageId: "sequentialGroups",
+                fix: (fixer) => {
+                  const prevImportGroupTextStart = (prevImportGroup.imports[0].node.loc as SourceLocation).start.line - 2;
+                  const prevImportGroupTextEnd = (prevImportGroup.imports[0].node.loc as SourceLocation).end.line;
+                  const currentImportGroupTextStart = firstGroupImportLine - 2;
+                  const currentImportGroupTextEnd = lastGroupImportLine;
+                  const insertAt = prevImportGroupTextStart;
+                  const newLines = getNewCodeLines(
+                    [...lines.slice(currentImportGroupTextStart, currentImportGroupTextEnd), "", ...lines.slice(prevImportGroupTextStart, prevImportGroupTextEnd)],
+                    insertAt,
+                    [[prevImportGroupTextStart, prevImportGroupTextEnd - 1], [currentImportGroupTextStart, currentImportGroupTextEnd - 1]]
+                  );
+
+                  const fixes: any = [
+                    fixer.removeRange([0, lastImportNodeRangeEnd]),
+                    fixer.insertTextAfterRange([0, 0], newLines.join("\n")),
+                  ];
+
+                  return fixes;
+                },
+              });
+              return true;
+            }
+
+            const unsequentialItem = imports.find((next, index) => {
+              return index !== 0 && imports[index - 1].pathPriority > next.pathPriority;
             })
 
             const groupImportTextRanges: [number, number][] = [];
@@ -180,7 +210,6 @@ const rule: Rule.RuleModule = {
                     fixer.removeRange([0, lastImportNodeRangeEnd]),
                     fixer.insertTextAfterRange([0, 0], newLines.join("\n")),
                   ];
-                  console.log(fixes);
 
                   return fixes;
                 },
@@ -323,13 +352,16 @@ const getImportsByGroup = (
   options: RuleOptions,
   importNodes: ImportDeclaration[]
 ): ImportGroups => {
+  const importGroupPriorityMap = new Map(
+    options.map(({ groupName }, groupPriority) => [groupName, groupPriority])
+  );
   const importGroupMap = new Map<
     string,
     {
       node: ImportDeclaration;
       pathPriority: number;
     }[]
-  >(options.map(({ groupName }) => [groupName, []]));
+  >();
 
   function addItemToGroup(
     groupName: string,
@@ -340,7 +372,7 @@ const getImportsByGroup = (
   ) {
     const prevImports = importGroupMap.get(groupName);
     if (!prevImports) {
-      // never
+      importGroupMap.set(groupName, [item]);
     } else {
       importGroupMap.set(groupName, [...prevImports, item]);
     }
@@ -363,10 +395,14 @@ const getImportsByGroup = (
   });
 
   return Array.from(importGroupMap)
-    .map(([groupName, imports]) => ({
-      groupName,
-      imports,
-    }))
+    .map(([groupName, imports]) => {
+      const groupPriority = importGroupPriorityMap.get(groupName);
+      return {
+        groupName,
+        imports,
+        groupPriority: groupPriority === undefined ? -1 : groupPriority,
+      };
+    })
     .filter(({ imports }) => imports.length > 0);
 };
 
@@ -374,7 +410,7 @@ const composeNewCodeLines = (
   lines: string[],
   lasCommentLine: number,
   lastImportLine: number
-) => (newLines: string[], index: number, excludeLineNumbers: number[][]) => {
+) => (newLines: string[], index: number, excludeLineNumbers: [number, number][]) => {
   const sliceEnd =
     lastImportLine > lasCommentLine ? lastImportLine : lasCommentLine;
   const importLines = lines.slice(0, sliceEnd);

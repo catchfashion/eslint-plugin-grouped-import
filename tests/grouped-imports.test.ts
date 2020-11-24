@@ -58,6 +58,32 @@ import c from 'contexts/someContext';
   });
 };
 
+const runSequentialGroupsTest = () => {
+  tester.run('Test sequentialGroups rule', rule, {
+    valid: [],
+    invalid: [
+      {
+        code:
+`// Hooks
+import u from "hooks/someHook";
+
+// Contexts
+import c from "contexts/someContext";
+      `,
+        options: ruleOptions,
+        errors: [{ message: messages.sequentialGroups }],
+        output: 
+`// Contexts
+import c from "contexts/someContext";
+
+// Hooks
+import u from "hooks/someHook";
+      `,
+      }
+    ],
+  });
+};
+
 const runSequentialItemsTest = () => {
   tester.run('Test sequentialItems rule', rule, {
     valid: [],
@@ -201,6 +227,7 @@ import u from "hooks/someHook";
 (() => {
   runNoCommentsTest();
   runNoGroupCommentTest();
+  runSequentialGroupsTest();
   runSequentialItemsTest();
   runWithoutGroupTest();
   runFirstImportTest();
