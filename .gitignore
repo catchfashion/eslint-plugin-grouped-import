@@ -3,5 +3,5 @@ yarn-debug.log*
 yarn-error.log*
 node_modules/
 .env
-lib/
+# lib/
 .idea/
