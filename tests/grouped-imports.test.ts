@@ -272,6 +272,10 @@ const runValidTest = () => {
   tester.run('Test valid imports', rule, {
     valid: [
       {
+        code:``,
+        options: ruleOptions,
+      },
+      {
         code:`
 import e from "external-module";
 

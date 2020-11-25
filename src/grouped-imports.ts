@@ -64,6 +64,10 @@ const rule: Rule.RuleModule = {
             (n) => n.type === "ImportDeclaration"
           ) as ImportDeclaration[];
 
+          if (importNodes.length === 0) {
+            return;
+          }
+
           // check if there are imports from config
 
           const importComments = node.comments ? node.comments : [];
