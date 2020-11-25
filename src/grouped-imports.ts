@@ -20,6 +20,7 @@ type RuleOptions = Array<{
 export const ruleMessages = {
   noComments: "Imports must be accompanied by comments",
   noGroupComment: 'No comment found for import group "{{comment}}"',
+  matchedItem: "Matched import item should belong to group",
   sequentialGroups: "All import groups must be sequential",
   sequentialItems: "All import items in a group must be sequential",
   firstImport: "First import in a group must be preceded by a group comment",
@@ -148,6 +149,56 @@ const rule: Rule.RuleModule = {
                     firstImport,
                     `// ${commentKey}\n`
                   );
+                },
+              });
+              return true;
+            }
+
+            // sum up expected lines (support for multiline imports)
+            const expectedLinesSum = _.sumBy(imports, ({ node }) => {
+              const start = (node.loc as SourceLocation).start.line;
+
+              // include eslint-disable comment in the overall line count
+              const gComment = _.find(
+                importComments,
+                (c) => (c.loc as SourceLocation).start.line === start - 1
+              );
+              const disableLintComment =
+                gComment && _.includes(gComment.value, "eslint-disable");
+
+              const gEnd = (node.loc as SourceLocation).end.line;
+              const end = disableLintComment ? gEnd + 1 : gEnd;
+              return end - start + 1;
+            });
+
+            const expectedLines = firstGroupImportLine + expectedLinesSum - 1;
+            if (expectedLines !== lastGroupImportLine) {
+              context.report({
+                node: lastGroupImport,
+                messageId: "matchedItem",
+                fix: (fixer) => {
+                  const groupImportTextRanges: [number, number][] = [];
+                  const allGroupImportTexts = _.flatMap(imports, (g) => {
+                    const start = (g.node.loc as SourceLocation).start.line - 1;
+                    const end = (g.node.loc as SourceLocation).end.line;
+                    groupImportTextRanges.push([start, end - 1]);
+                    return lines.slice(start, end);
+                  });
+
+                  const insertAt = (importComment.loc as SourceLocation).end
+                    .line;
+                  const newLines = getNewCodeLines(
+                    allGroupImportTexts,
+                    insertAt,
+                    groupImportTextRanges
+                  );
+
+                  const fixes: any = [
+                    fixer.removeRange([0, lastImportNodeRangeEnd]),
+                    fixer.insertTextAfterRange([0, 0], newLines.join("\n")),
+                  ];
+
+                  return fixes;
                 },
               });
               return true;

@@ -58,6 +58,67 @@ import c from 'contexts/someContext';
   });
 };
 
+const runMatchedItemTest = () => {
+  tester.run('Test matchedItem rule', rule, {
+    valid: [],
+    invalid: [
+      {
+        code:
+`import p from "components/p";
+
+// Components
+import g from "components/g";
+      `,
+        options: ruleOptions,
+        errors: [{ message: messages.matchedItem }],
+        output: 
+`// Components
+import p from "components/p";
+import g from "components/g";
+      `,
+      },
+      {
+        code:
+`
+// Components
+import g from "components/g";
+
+import p from "components/p";
+      `,
+        options: ruleOptions,
+        errors: [{ message: messages.matchedItem }],
+        output: 
+`// Components
+import g from "components/g";
+import p from "components/p";
+      `,
+      },
+      {
+        code:
+`
+// Components
+import g from "components/g";
+
+// Services
+import s from "services/s";
+
+import p from "components/p";
+      `,
+        options: ruleOptions,
+        errors: [{ message: messages.matchedItem }],
+        output: 
+`// Components
+import g from "components/g";
+import p from "components/p";
+
+// Services
+import s from "services/s";
+      `,
+      }
+    ],
+  });
+};
+
 const runSequentialGroupsTest = () => {
   tester.run('Test sequentialGroups rule', rule, {
     valid: [],
@@ -103,7 +164,7 @@ import g from "components/someGlobalComponent";
 import p from "../shared/someParentPathComponent";
 import s from "./someSiblingPathComponent";
       `,
-      }
+      },
     ],
   });
 };
@@ -227,6 +288,7 @@ import u from "hooks/someHook";
 (() => {
   runNoCommentsTest();
   runNoGroupCommentTest();
+  runMatchedItemTest();
   runSequentialGroupsTest();
   runSequentialItemsTest();
   runWithoutGroupTest();
