@@ -18,7 +18,6 @@ type RuleOptions = Array<{
 }>;
 
 export const ruleMessages = {
-  noComments: "Imports must be accompanied by comments",
   noGroupComment: 'No comment found for import group "{{comment}}"',
   matchedItem: "Matched import item should belong to group",
   sequentialGroups: "All import groups must be sequential",
@@ -94,35 +93,6 @@ const rule: Rule.RuleModule = {
             lastCommentNodeLine,
             lastImportNodeLine
           );
-
-          if (importComments.length === 0) {
-            context.report({
-              node,
-              messageId: "noComments",
-              fix: (fixer) => {
-                const fixes = importGroups.map(
-                  ({ imports, groupName: commentKey }) => {
-                    if (_.isEmpty(imports)) {
-                      return;
-                    }
-
-                    const firstImport = imports[0].node;
-                    if (!firstImport.loc || !firstImport.range) {
-                      return;
-                    }
-
-                    return fixer.insertTextBefore(
-                      firstImport,
-                      `// ${commentKey}\n`
-                    );
-                  }
-                );
-
-                return _.compact(fixes) as any;
-              },
-            });
-            return;
-          }
 
           importGroups.some(({ imports, groupPriority, groupName: commentKey }, importGroupIndex) => {
             if (_.isEmpty(imports)) {

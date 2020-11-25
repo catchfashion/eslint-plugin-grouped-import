@@ -18,25 +18,6 @@ const messages = {
   noGroupComment: (comment: string) => `No comment found for import group "${comment}"`,
 };
 
-const runNoCommentsTest = () => {
-  tester.run('Test noComments rule', rule, {
-    valid: [],
-    invalid: [
-      {
-        code: `
-import c from 'contexts/someContext';
-      `,
-        errors: [{ message: messages.noComments }],
-        options: ruleOptions,
-        output: `
-// Contexts
-import c from 'contexts/someContext';
-      `,
-      },
-    ]
-  })
-}
-
 const runNoGroupCommentTest = () => {
   tester.run('Test noGroupComment rule', rule, {
     valid: [],
@@ -277,6 +258,12 @@ const runValidTest = () => {
       },
       {
         code:`
+import { useLocation } from "react-router-dom";
+        `,
+        options: ruleOptions,
+      },
+      {
+        code:`
 import e from "external-module";
 
 // Hooks
@@ -290,7 +277,6 @@ import u from "hooks/someHook";
 };
 
 (() => {
-  runNoCommentsTest();
   runNoGroupCommentTest();
   runMatchedItemTest();
   runSequentialGroupsTest();
