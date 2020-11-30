@@ -150,6 +150,32 @@ import s from "./someSiblingPathComponent";
   });
 };
 
+const runAlphabeticalItemsTest = () => {
+  tester.run('Test alphabeticalItems rule', rule, {
+    valid: [],
+    invalid: [
+      {
+        code:
+`// Components
+import c from "components/a/c";
+import b2 from "components/a/b2";
+import b1 from "components/a/b1";
+import a from "components/a";
+      `,
+        options: ruleOptions,
+        errors: [{ message: messages.alphabeticalItems }],
+        output: 
+`// Components
+import a from "components/a";
+import b1 from "components/a/b1";
+import b2 from "components/a/b2";
+import c from "components/a/c";
+      `,
+      },
+    ],
+  });
+};
+
 const runFirstImportTest = () => {
   tester.run('Test firstImport rule', rule, {
     valid: [],
@@ -281,6 +307,7 @@ import u from "hooks/someHook";
   runMatchedItemTest();
   runSequentialGroupsTest();
   runSequentialItemsTest();
+  runAlphabeticalItemsTest();
   runWithoutGroupTest();
   runFirstImportTest();
   runEmptyLineAfterTest();

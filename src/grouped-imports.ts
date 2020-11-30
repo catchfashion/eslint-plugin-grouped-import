@@ -22,6 +22,7 @@ export const ruleMessages = {
   matchedItem: "Matched import item should belong to group",
   sequentialGroups: "All import groups must be sequential",
   sequentialItems: "All import items in a group must be sequential",
+  alphabeticalItems: "All import items with the same priority in a group must be alphabetical",
   firstImport: "First import in a group must be preceded by a group comment",
   emptyLineBefore: "Import group comment must be preceded by an empty line",
   emptyLineAfter: "Last import in a group must be followed by an empty line",
@@ -210,15 +211,15 @@ const rule: Rule.RuleModule = {
               return index !== 0 && imports[index - 1].pathPriority > next.pathPriority;
             })
 
-            const groupImportTextRanges: [number, number][] = [];
-            const allGroupImportTexts = _.flatMap(unsequentialItem ? _.sortBy(imports, g => g.pathPriority) : imports, (g) => {
-              const start = (g.node.loc as SourceLocation).start.line - 1;
-              const end = (g.node.loc as SourceLocation).end.line;
-              groupImportTextRanges.push([start, end - 1]);
-              return lines.slice(start, end);
-            });
-
             if (unsequentialItem) {
+              const groupImportTextRanges: [number, number][] = [];
+              const allGroupImportTexts = _.flatMap(unsequentialItem ? _.sortBy(imports, g => g.pathPriority) : imports, (g) => {
+                const start = (g.node.loc as SourceLocation).start.line - 1;
+                const end = (g.node.loc as SourceLocation).end.line;
+                groupImportTextRanges.push([start, end - 1]);
+                return lines.slice(start, end);
+              });
+
               context.report({
                 node: unsequentialItem.node,
                 messageId: "sequentialItems",
@@ -241,6 +242,56 @@ const rule: Rule.RuleModule = {
               });
               return true;
             }
+
+            const unalphabetcialItem = imports.find((next, index) => {
+              if (index === 0) {
+                return false;
+              }
+              const prev = imports[index - 1];
+              if (prev.pathPriority !== next.pathPriority) {
+                return false;
+              }
+              return (prev.node.source.value as string) > (next.node.source.value as string);
+            })
+
+            if (unalphabetcialItem) {
+              const groupImportTextRanges: [number, number][] = [];
+              const allGroupImportTexts = _.flatMap(_.sortBy(imports, i => i.pathPriority, i => i.node.source.value), (g) => {
+                const start = (g.node.loc as SourceLocation).start.line - 1;
+                const end = (g.node.loc as SourceLocation).end.line;
+                groupImportTextRanges.push([start, end - 1]);
+                return lines.slice(start, end);
+              });
+              context.report({
+                node: unalphabetcialItem.node,
+                messageId: "alphabeticalItems",
+                fix: (fixer) => {
+                  const insertAt = (importComment.loc as SourceLocation).end
+                    .line;
+                  const newLines = getNewCodeLines(
+                    allGroupImportTexts,
+                    insertAt,
+                    groupImportTextRanges
+                  );
+
+                  const fixes: any = [
+                    fixer.removeRange([0, lastImportNodeRangeEnd]),
+                    fixer.insertTextAfterRange([0, 0], newLines.join("\n")),
+                  ];
+
+                  return fixes;
+                },
+              });
+              return true;
+            }
+
+            const groupImportTextRanges: [number, number][] = [];
+            const allGroupImportTexts = _.flatMap(imports, (g) => {
+              const start = (g.node.loc as SourceLocation).start.line - 1;
+              const end = (g.node.loc as SourceLocation).end.line;
+              groupImportTextRanges.push([start, end - 1]);
+              return lines.slice(start, end);
+            });
 
             // check if first import is preceded by a group comment
             if (
