@@ -16,11 +16,17 @@
   ],
   "author": "kairome",
   "license": "MIT",
-  "keywords": ["eslint plugin", "eslint rule", "group imports", "grouped imports"],
+  "keywords": [
+    "eslint plugin",
+    "eslint rule",
+    "group imports",
+    "grouped imports"
+  ],
   "repository": "github:kairome/eslint-plugin-grouped-import",
   "devDependencies": {
     "@types/eslint": "^4.16.6",
     "@types/lodash": "^4.14.155",
+    "@types/minimatch": "^3.0.3",
     "@types/node": "^11.10.4",
     "@typescript-eslint/parser": "^1.4.2",
     "eslint": "^5.15.0",
@@ -47,5 +53,8 @@
       "ts",
       "json"
     ]
+  },
+  "dependencies": {
+    "minimatch": "^3.0.4"
   }
 }
