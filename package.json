@@ -1,6 +1,6 @@
 {
-  "name": "eslint-plugin-grouped-import",
-  "version": "1.0.2",
+  "name": "eslint-plugin-ordered-grouped-import",
+  "version": "1.0.1",
   "description": "Group imports based on the import path",
   "main": "lib/index.js",
   "scripts": {
@@ -14,7 +14,7 @@
     "package.json",
     "lib"
   ],
-  "author": "kairome",
+  "author": "engolder",
   "license": "MIT",
   "keywords": [
     "eslint plugin",
@@ -22,7 +22,7 @@
     "group imports",
     "grouped imports"
   ],
-  "repository": "github:kairome/eslint-plugin-grouped-import",
+  "repository": "github:catchfashion/eslint-plugin-grouped-import",
   "devDependencies": {
     "@types/eslint": "^4.16.6",
     "@types/lodash": "^4.14.155",
