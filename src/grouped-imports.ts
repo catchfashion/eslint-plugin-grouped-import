@@ -6,11 +6,13 @@ import minimatch from "minimatch";
 type ImportGroups = Array<{
   groupName: string;
   groupPriority: number; // 0 is first
-  imports: {
-    node: ImportDeclaration;
-    pathPriority: number; // 0 is first
-  }[];
+  imports: ImportItem[];
 }>;
+
+type ImportItem = {
+  node: ImportDeclaration;
+  pathPriority: number; // 0 is first
+};
 
 type RuleOptions = Array<{
   groupName: string;
@@ -27,7 +29,7 @@ export const ruleMessages = {
   firstImport: "First import in a group must be preceded by a group comment",
   emptyLineBefore: "Import group comment must be preceded by an empty line",
   emptyLineAfter: "Last import in a group must be followed by an empty line",
-  importsWithoutGroup: "Imports without group must be at the top of the file",
+  ungroupedItems: "Imports without group must be at the top of the file",
 };
 
 const rule: Rule.RuleModule = {
@@ -72,7 +74,10 @@ const rule: Rule.RuleModule = {
           // check if there are imports from config
 
           const importComments = node.comments ? node.comments : [];
-          const importGroups = getImportsByGroup(options, importNodes);
+          const { importGroups, ungroupedNodes } = getImportsByGroup(
+            options,
+            importNodes
+          );
 
           const commentKeys = options.map(({ groupName }) => groupName);
           const sourceCode = context.getSourceCode();
@@ -96,7 +101,19 @@ const rule: Rule.RuleModule = {
             lastImportNodeLine
           );
 
-          importGroups.some(
+          const unalphabetcialUngroupedNode = ungroupedNodes.find(
+            (next, index) => {
+              if (index === 0) {
+                return false;
+              }
+              return (
+                (ungroupedNodes[index - 1].source.value as string) >
+                (next.source.value as string)
+              );
+            }
+          );
+
+          const importGroupsHasReport = importGroups.some(
             (
               { imports, groupPriority, groupName: commentKey },
               importGroupIndex
@@ -411,64 +428,96 @@ const rule: Rule.RuleModule = {
                 return true;
               }
 
-              const importsWithGroup = _.flatMap(importGroups, (g) =>
-                g.imports.map(({ node }) => node)
-              );
-              const importsWithoutGroup = _.xor(importNodes, importsWithGroup);
-
-              // find first group comment, don't count other comments
-              const firstGroupImportComment = _.find(importComments, (c) =>
-                _.includes(commentKeys, c.value.trim())
-              );
-
-              const importsNotAtTheTop = firstGroupImportComment
-                ? _.some(importsWithoutGroup, (g) => {
-                    return (
-                      (g.loc as SourceLocation).start.line >
-                      (firstGroupImportComment.loc as SourceLocation).start.line
-                    );
-                  })
-                : false;
-
-              if (importsNotAtTheTop && firstGroupImportComment) {
-                context.report({
-                  node,
-                  messageId: "importsWithoutGroup",
-                  fix: (fixer) => {
-                    const excludeLines: [number, number][] = [];
-                    const allImportLines: any = _.flatMap(
-                      importsWithoutGroup,
-                      (importNode) => {
-                        const start =
-                          (importNode.loc as SourceLocation).start.line - 1;
-                        const end = (importNode.loc as SourceLocation).end.line;
-                        excludeLines.push([start, end - 1]);
-                        return lines.slice(start, end);
-                      }
-                    );
-
-                    const newLines = getNewCodeLines(
-                      allImportLines,
-                      0,
-                      excludeLines
-                    );
-
-                    const end = (lastImportNode.range as number[])[1];
-                    const fixes: any = [
-                      fixer.removeRange([0, end]),
-                      fixer.insertTextAfterRange([0, 0], newLines.join("\n")),
-                    ];
-
-                    return fixes;
-                  },
-                });
-
-                return true;
-              }
-
               return false;
             }
           );
+
+          if (importGroupsHasReport) {
+            return;
+          }
+
+          // find first group comment, don't count other comments
+          const firstGroupImportComment = _.find(importComments, (c) =>
+            _.includes(commentKeys, c.value.trim())
+          );
+
+          const importsNotAtTheTop = firstGroupImportComment
+            ? _.some(ungroupedNodes, (g) => {
+                return (
+                  (g.loc as SourceLocation).start.line >
+                  (firstGroupImportComment.loc as SourceLocation).start.line
+                );
+              })
+            : false;
+
+          if (importsNotAtTheTop && firstGroupImportComment) {
+            context.report({
+              node,
+              messageId: "ungroupedItems",
+              fix: (fixer) => {
+                const excludeLines: [number, number][] = [];
+                const allImportLines: any = _.flatMap(
+                  ungroupedNodes,
+                  (importNode) => {
+                    const start =
+                      (importNode.loc as SourceLocation).start.line - 1;
+                    const end = (importNode.loc as SourceLocation).end.line;
+                    excludeLines.push([start, end - 1]);
+                    return lines.slice(start, end);
+                  }
+                );
+
+                const newLines = getNewCodeLines(
+                  allImportLines,
+                  0,
+                  excludeLines
+                );
+
+                const end = (lastImportNode.range as number[])[1];
+                const fixes: any = [
+                  fixer.removeRange([0, end]),
+                  fixer.insertTextAfterRange([0, 0], newLines.join("\n")),
+                ];
+
+                return fixes;
+              },
+            });
+
+            return;
+          }
+            
+          if (unalphabetcialUngroupedNode) {
+            const groupImportTextRanges: [number, number][] = [];
+            const allGroupImportTexts = _.flatMap(
+              _.sortBy(ungroupedNodes, ({ source }) => source.value),
+              (g) => {
+                const start = (g.loc as SourceLocation).start.line - 1;
+                const end = (g.loc as SourceLocation).end.line;
+                groupImportTextRanges.push([start, end - 1]);
+                return lines.slice(start, end);
+              }
+            );
+            context.report({
+              node: unalphabetcialUngroupedNode,
+              messageId: "alphabeticalItems",
+              fix: (fixer) => {
+                const insertAt = 0;
+                const newLines = getNewCodeLines(
+                  allGroupImportTexts,
+                  insertAt,
+                  groupImportTextRanges
+                );
+
+                const fixes: any = [
+                  fixer.removeRange([0, lastImportNodeRangeEnd]),
+                  fixer.insertTextAfterRange([0, 0], newLines.join("\n")),
+                ];
+
+                return fixes;
+              },
+            });
+            return;
+          }
         }
       },
     };
@@ -478,17 +527,15 @@ const rule: Rule.RuleModule = {
 const getImportsByGroup = (
   options: RuleOptions,
   importNodes: ImportDeclaration[]
-): ImportGroups => {
+): {
+  importGroups: ImportGroups;
+  ungroupedNodes: ImportDeclaration[];
+} => {
   const importGroupPriorityMap = new Map(
     options.map(({ groupName }, groupPriority) => [groupName, groupPriority])
   );
-  const importGroupMap = new Map<
-    string,
-    {
-      node: ImportDeclaration;
-      pathPriority: number;
-    }[]
-  >();
+  const importGroupMap = new Map<string, ImportItem[]>();
+  const ungroupedNodeSet = new Set(importNodes);
 
   function addItemToGroup(
     groupName: string,
@@ -498,6 +545,7 @@ const getImportsByGroup = (
     }
   ) {
     const prevImports = importGroupMap.get(groupName);
+    ungroupedNodeSet.delete(item.node);
     if (!prevImports) {
       importGroupMap.set(groupName, [item]);
     } else {
@@ -521,16 +569,19 @@ const getImportsByGroup = (
     });
   });
 
-  return Array.from(importGroupMap)
-    .map(([groupName, imports]) => {
-      const groupPriority = importGroupPriorityMap.get(groupName);
-      return {
-        groupName,
-        imports,
-        groupPriority: groupPriority === undefined ? -1 : groupPriority,
-      };
-    })
-    .filter(({ imports }) => imports.length > 0);
+  return {
+    importGroups: Array.from(importGroupMap)
+      .map(([groupName, imports]) => {
+        const groupPriority = importGroupPriorityMap.get(groupName);
+        return {
+          groupName,
+          imports,
+          groupPriority: groupPriority === undefined ? -1 : groupPriority,
+        };
+      })
+      .filter(({ imports }) => imports.length > 0),
+    ungroupedNodes: Array.from(ungroupedNodeSet),
+  };
 };
 
 const composeNewCodeLines = (

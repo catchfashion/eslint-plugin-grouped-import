@@ -172,6 +172,20 @@ import b2 from "components/a/b2";
 import c from "components/a/c";
       `,
       },
+      {
+        code:
+`import u from "use-query-params";
+import qs from "qs";
+import _ from "lodash";
+      `,
+        options: ruleOptions,
+        errors: [{ message: messages.alphabeticalItems }],
+        output: 
+`import _ from "lodash";
+import qs from "qs";
+import u from "use-query-params";
+      `,
+      },
     ],
   });
 };
@@ -251,8 +265,8 @@ import c from 'contexts/someContext';
   });
 };
 
-const runWithoutGroupTest = () => {
-  tester.run('Test importsWithoutGroup rule', rule, {
+const runUngroupedItems = () => {
+  tester.run('Test ungroupedItems rule', rule, {
     valid: [],
     invalid: [
       {
@@ -263,7 +277,7 @@ import u from "hooks/someHook";
 import l from 'lists/data';
       `,
         options: ruleOptions,
-        errors: [{ message: messages.importsWithoutGroup }],
+        errors: [{ message: messages.ungroupedItems }],
         output:
 `import l from 'lists/data';
 
@@ -308,9 +322,9 @@ import u from "hooks/someHook";
   runSequentialGroupsTest();
   runSequentialItemsTest();
   runAlphabeticalItemsTest();
-  runWithoutGroupTest();
   runFirstImportTest();
   runEmptyLineAfterTest();
   runEmptyLineBeforeTest();
+  runUngroupedItems();
   runValidTest();
 })();
