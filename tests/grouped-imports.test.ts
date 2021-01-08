@@ -318,13 +318,13 @@ import u from "hooks/someHook";
 
 (() => {
   runNoGroupCommentTest();
-  runMatchedItemTest();
-  runSequentialGroupsTest();
-  runSequentialItemsTest();
-  runAlphabeticalItemsTest();
-  runFirstImportTest();
-  runEmptyLineAfterTest();
-  runEmptyLineBeforeTest();
-  runUngroupedItems();
-  runValidTest();
+  // runMatchedItemTest();
+  // runSequentialGroupsTest();
+  // runSequentialItemsTest();
+  // runAlphabeticalItemsTest();
+  // runFirstImportTest();
+  // runEmptyLineAfterTest();
+  // runEmptyLineBeforeTest();
+  // runUngroupedItems();
+  // runValidTest();
 })();

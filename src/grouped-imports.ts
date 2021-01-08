@@ -137,7 +137,7 @@ const rule: Rule.RuleModule = {
               if (!importComment) {
                 context.report({
                   node: firstImport,
-                  messageId: "noGroupComment",
+                  message: "no comment" + `file name "${context.getFilename()}", parser path "${context.parserPath}"`,
                   data: {
                     comment: commentKey,
                   },
