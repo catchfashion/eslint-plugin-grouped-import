@@ -24,8 +24,7 @@ export const ruleMessages = {
   matchedItem: "Matched import item should belong to group",
   sequentialGroups: "All import groups must be sequential",
   sequentialItems: "All import items in a group must be sequential",
-  alphabeticalItems:
-    "All import items with the same priority in a group must be alphabetical",
+  alphabeticalItems: "All import items with the same priority in a group must be alphabetical",
   firstImport: "First import in a group must be preceded by a group comment",
   emptyLineBefore: "Import group comment must be preceded by an empty line",
   emptyLineAfter: "Last import in a group must be followed by an empty line",
@@ -62,10 +61,7 @@ const rule: Rule.RuleModule = {
       Program: (node) => {
         const options: RuleOptions = context.options[0];
         if (node.type === "Program") {
-          const importNodes = _.filter(
-            node.body,
-            (n) => n.type === "ImportDeclaration"
-          ) as ImportDeclaration[];
+          const importNodes = _.filter(node.body, (n) => n.type === "ImportDeclaration") as ImportDeclaration[];
 
           if (importNodes.length === 0) {
             return;
@@ -74,65 +70,40 @@ const rule: Rule.RuleModule = {
           // check if there are imports from config
 
           const importComments = node.comments ? node.comments : [];
-          const { importGroups, ungroupedNodes } = getImportsByGroup(
-            options,
-            importNodes
-          );
+          const { importGroups, ungroupedNodes } = getImportsByGroup(options, importNodes);
 
           const commentKeys = options.map(({ groupName }) => groupName);
           const sourceCode = context.getSourceCode();
           const lines = sourceCode.lines;
           const lastImportNode = importNodes[importNodes.length - 1];
-          const lastImportNodeLine = (lastImportNode.loc as SourceLocation).end
-            .line;
+          const lastImportNodeLine = (lastImportNode.loc as SourceLocation).end.line;
           const reversedComments = [...importComments].reverse();
-          const lastCommentNode = _.find(reversedComments, (c) =>
-            _.includes(commentKeys, c.value.trim())
-          );
+          const lastCommentNode = _.find(reversedComments, (c) => _.includes(commentKeys, c.value.trim()));
 
-          const lastCommentNodeLine = lastCommentNode
-            ? (lastCommentNode.loc as SourceLocation).end.line
-            : 0;
+          const lastCommentNodeLine = lastCommentNode ? (lastCommentNode.loc as SourceLocation).end.line : 0;
           const lastImportNodeRangeEnd = (lastImportNode.range as number[])[1];
 
-          const getNewCodeLines = composeNewCodeLines(
-            lines,
-            lastCommentNodeLine,
-            lastImportNodeLine
-          );
+          const getNewCodeLines = composeNewCodeLines(lines, lastCommentNodeLine, lastImportNodeLine);
 
-          const unalphabetcialUngroupedNode = ungroupedNodes.find(
-            (next, index) => {
-              if (index === 0) {
-                return false;
-              }
-              return (
-                (ungroupedNodes[index - 1].source.value as string) >
-                (next.source.value as string)
-              );
+          const unalphabetcialUngroupedNode = ungroupedNodes.find((next, index) => {
+            if (index === 0) {
+              return false;
             }
-          );
+            return (ungroupedNodes[index - 1].source.value as string) > (next.source.value as string);
+          });
 
           const importGroupsHasReport = importGroups.some(
-            (
-              { imports, groupPriority, groupName: commentKey },
-              importGroupIndex
-            ) => {
+            ({ imports, groupPriority, groupName: commentKey }, importGroupIndex) => {
               if (_.isEmpty(imports)) {
                 return false;
               }
 
-              const importComment = _.find(
-                importComments,
-                (c) => c.value.trim() === commentKey
-              );
+              const importComment = _.find(importComments, (c) => c.value.trim() === commentKey);
               const firstImport = imports[0].node;
               const lastGroupImport = imports[imports.length - 1].node;
 
-              const firstGroupImportLine = (firstImport.loc as SourceLocation)
-                .start.line;
-              const lastGroupImportLine = (lastGroupImport.loc as SourceLocation)
-                .end.line;
+              const firstGroupImportLine = (firstImport.loc as SourceLocation).start.line;
+              const lastGroupImportLine = (lastGroupImport.loc as SourceLocation).end.line;
 
               if (!importComment) {
                 context.report({
@@ -142,10 +113,7 @@ const rule: Rule.RuleModule = {
                     comment: commentKey,
                   },
                   fix: (fixer) => {
-                    return fixer.insertTextBefore(
-                      firstImport,
-                      `// ${commentKey}\n`
-                    );
+                    return fixer.insertTextBefore(firstImport, `// ${commentKey}\n`);
                   },
                 });
                 return true;
@@ -156,12 +124,8 @@ const rule: Rule.RuleModule = {
                 const start = (node.loc as SourceLocation).start.line;
 
                 // include eslint-disable comment in the overall line count
-                const gComment = _.find(
-                  importComments,
-                  (c) => (c.loc as SourceLocation).start.line === start - 1
-                );
-                const disableLintComment =
-                  gComment && _.includes(gComment.value, "eslint-disable");
+                const gComment = _.find(importComments, (c) => (c.loc as SourceLocation).start.line === start - 1);
+                const disableLintComment = gComment && _.includes(gComment.value, "eslint-disable");
 
                 const gEnd = (node.loc as SourceLocation).end.line;
                 const end = disableLintComment ? gEnd + 1 : gEnd;
@@ -176,20 +140,14 @@ const rule: Rule.RuleModule = {
                   fix: (fixer) => {
                     const groupImportTextRanges: [number, number][] = [];
                     const allGroupImportTexts = _.flatMap(imports, (g) => {
-                      const start =
-                        (g.node.loc as SourceLocation).start.line - 1;
+                      const start = (g.node.loc as SourceLocation).start.line - 1;
                       const end = (g.node.loc as SourceLocation).end.line;
                       groupImportTextRanges.push([start, end - 1]);
                       return lines.slice(start, end);
                     });
 
-                    const insertAt = (importComment.loc as SourceLocation).end
-                      .line;
-                    const newLines = getNewCodeLines(
-                      allGroupImportTexts,
-                      insertAt,
-                      groupImportTextRanges
-                    );
+                    const insertAt = (importComment.loc as SourceLocation).end.line;
+                    const newLines = getNewCodeLines(allGroupImportTexts, insertAt, groupImportTextRanges);
 
                     const fixes: any = [
                       fixer.removeRange([0, lastImportNodeRangeEnd]),
@@ -203,42 +161,27 @@ const rule: Rule.RuleModule = {
               }
 
               const prevImportGroup = importGroups[importGroupIndex - 1];
-              if (
-                importGroupIndex !== 0 &&
-                prevImportGroup.groupPriority > groupPriority
-              ) {
+              if (importGroupIndex !== 0 && prevImportGroup.groupPriority > groupPriority) {
                 context.report({
                   node: firstImport,
                   messageId: "sequentialGroups",
                   fix: (fixer) => {
                     const prevImportGroupTextStart =
-                      (prevImportGroup.imports[0].node.loc as SourceLocation)
-                        .start.line - 2;
-                    const prevImportGroupTextEnd = (prevImportGroup.imports[0]
-                      .node.loc as SourceLocation).end.line;
-                    const currentImportGroupTextStart =
-                      firstGroupImportLine - 2;
+                      (prevImportGroup.imports[0].node.loc as SourceLocation).start.line - 2;
+                    const prevImportGroupTextEnd = (prevImportGroup.imports[0].node.loc as SourceLocation).end.line;
+                    const currentImportGroupTextStart = firstGroupImportLine - 2;
                     const currentImportGroupTextEnd = lastGroupImportLine;
                     const insertAt = prevImportGroupTextStart;
                     const newLines = getNewCodeLines(
                       [
-                        ...lines.slice(
-                          currentImportGroupTextStart,
-                          currentImportGroupTextEnd
-                        ),
+                        ...lines.slice(currentImportGroupTextStart, currentImportGroupTextEnd),
                         "",
-                        ...lines.slice(
-                          prevImportGroupTextStart,
-                          prevImportGroupTextEnd
-                        ),
+                        ...lines.slice(prevImportGroupTextStart, prevImportGroupTextEnd),
                       ],
                       insertAt,
                       [
                         [prevImportGroupTextStart, prevImportGroupTextEnd - 1],
-                        [
-                          currentImportGroupTextStart,
-                          currentImportGroupTextEnd - 1,
-                        ],
+                        [currentImportGroupTextStart, currentImportGroupTextEnd - 1],
                       ]
                     );
 
@@ -254,18 +197,13 @@ const rule: Rule.RuleModule = {
               }
 
               const unsequentialItem = imports.find((next, index) => {
-                return (
-                  index !== 0 &&
-                  imports[index - 1].pathPriority > next.pathPriority
-                );
+                return index !== 0 && imports[index - 1].pathPriority > next.pathPriority;
               });
 
               if (unsequentialItem) {
                 const groupImportTextRanges: [number, number][] = [];
                 const allGroupImportTexts = _.flatMap(
-                  unsequentialItem
-                    ? _.sortBy(imports, (g) => g.pathPriority)
-                    : imports,
+                  unsequentialItem ? _.sortBy(imports, (g) => g.pathPriority) : imports,
                   (g) => {
                     const start = (g.node.loc as SourceLocation).start.line - 1;
                     const end = (g.node.loc as SourceLocation).end.line;
@@ -278,13 +216,8 @@ const rule: Rule.RuleModule = {
                   node: unsequentialItem.node,
                   messageId: "sequentialItems",
                   fix: (fixer) => {
-                    const insertAt = (importComment.loc as SourceLocation).end
-                      .line;
-                    const newLines = getNewCodeLines(
-                      allGroupImportTexts,
-                      insertAt,
-                      groupImportTextRanges
-                    );
+                    const insertAt = (importComment.loc as SourceLocation).end.line;
+                    const newLines = getNewCodeLines(allGroupImportTexts, insertAt, groupImportTextRanges);
 
                     const fixes: any = [
                       fixer.removeRange([0, lastImportNodeRangeEnd]),
@@ -305,10 +238,7 @@ const rule: Rule.RuleModule = {
                 if (prev.pathPriority !== next.pathPriority) {
                   return false;
                 }
-                return (
-                  (prev.node.source.value as string) >
-                  (next.node.source.value as string)
-                );
+                return (prev.node.source.value as string) > (next.node.source.value as string);
               });
 
               if (unalphabetcialItem) {
@@ -330,13 +260,8 @@ const rule: Rule.RuleModule = {
                   node: unalphabetcialItem.node,
                   messageId: "alphabeticalItems",
                   fix: (fixer) => {
-                    const insertAt = (importComment.loc as SourceLocation).end
-                      .line;
-                    const newLines = getNewCodeLines(
-                      allGroupImportTexts,
-                      insertAt,
-                      groupImportTextRanges
-                    );
+                    const insertAt = (importComment.loc as SourceLocation).end.line;
+                    const newLines = getNewCodeLines(allGroupImportTexts, insertAt, groupImportTextRanges);
 
                     const fixes: any = [
                       fixer.removeRange([0, lastImportNodeRangeEnd]),
@@ -358,16 +283,12 @@ const rule: Rule.RuleModule = {
               });
 
               // check if first import is preceded by a group comment
-              if (
-                importComment.loc &&
-                importComment.loc.start.line + 1 !== firstGroupImportLine
-              ) {
+              if (importComment.loc && importComment.loc.start.line + 1 !== firstGroupImportLine) {
                 context.report({
                   node: firstImport,
                   messageId: "firstImport",
                   fix: (fixer) => {
-                    const commentLine = (importComment.loc as SourceLocation)
-                      .start.line;
+                    const commentLine = (importComment.loc as SourceLocation).start.line;
 
                     const newLines = getNewCodeLines(
                       allGroupImportTexts,
@@ -375,13 +296,8 @@ const rule: Rule.RuleModule = {
                       groupImportTextRanges
                     );
 
-                    const commentEnd = lastCommentNode
-                      ? (lastCommentNode.range as number[])[1]
-                      : 0;
-                    const insertAt =
-                      lastImportNodeRangeEnd > commentEnd
-                        ? lastImportNodeRangeEnd
-                        : commentEnd;
+                    const commentEnd = lastCommentNode ? (lastCommentNode.range as number[])[1] : 0;
+                    const insertAt = lastImportNodeRangeEnd > commentEnd ? lastImportNodeRangeEnd : commentEnd;
                     const fixes: any = [
                       fixer.removeRange([0, insertAt]),
                       fixer.insertTextAfterRange([0, 0], newLines.join("\n")),
@@ -393,23 +309,16 @@ const rule: Rule.RuleModule = {
               }
 
               // find token before the group comment
-              const tokenBeforeComment = sourceCode.getTokenBefore(
-                importComment,
-                { skip: 0, includeComments: true }
-              );
+              const tokenBeforeComment = sourceCode.getTokenBefore(importComment, { skip: 0, includeComments: true });
               if (importComment.loc && tokenBeforeComment) {
                 // check if line before the comment is an empty one
-                const lineBeforeComment =
-                  lines[importComment.loc.start.line - 2];
+                const lineBeforeComment = lines[importComment.loc.start.line - 2];
                 if (lineBeforeComment && lineBeforeComment.trim()) {
                   context.report({
                     loc: importComment.loc,
                     messageId: "emptyLineBefore",
                     fix: (fixer) => {
-                      return fixer.insertTextBeforeRange(
-                        importComment.range as [number, number],
-                        "\n"
-                      );
+                      return fixer.insertTextBeforeRange(importComment.range as [number, number], "\n");
                     },
                   });
                   return true;
@@ -437,15 +346,12 @@ const rule: Rule.RuleModule = {
           }
 
           // find first group comment, don't count other comments
-          const firstGroupImportComment = _.find(importComments, (c) =>
-            _.includes(commentKeys, c.value.trim())
-          );
+          const firstGroupImportComment = _.find(importComments, (c) => _.includes(commentKeys, c.value.trim()));
 
           const importsNotAtTheTop = firstGroupImportComment
             ? _.some(ungroupedNodes, (g) => {
                 return (
-                  (g.loc as SourceLocation).start.line >
-                  (firstGroupImportComment.loc as SourceLocation).start.line
+                  (g.loc as SourceLocation).start.line > (firstGroupImportComment.loc as SourceLocation).start.line
                 );
               })
             : false;
@@ -456,22 +362,14 @@ const rule: Rule.RuleModule = {
               messageId: "ungroupedItems",
               fix: (fixer) => {
                 const excludeLines: [number, number][] = [];
-                const allImportLines: any = _.flatMap(
-                  ungroupedNodes,
-                  (importNode) => {
-                    const start =
-                      (importNode.loc as SourceLocation).start.line - 1;
-                    const end = (importNode.loc as SourceLocation).end.line;
-                    excludeLines.push([start, end - 1]);
-                    return lines.slice(start, end);
-                  }
-                );
+                const allImportLines: any = _.flatMap(ungroupedNodes, (importNode) => {
+                  const start = (importNode.loc as SourceLocation).start.line - 1;
+                  const end = (importNode.loc as SourceLocation).end.line;
+                  excludeLines.push([start, end - 1]);
+                  return lines.slice(start, end);
+                });
 
-                const newLines = getNewCodeLines(
-                  allImportLines,
-                  0,
-                  excludeLines
-                );
+                const newLines = getNewCodeLines(allImportLines, 0, excludeLines);
 
                 const end = (lastImportNode.range as number[])[1];
                 const fixes: any = [
@@ -485,7 +383,7 @@ const rule: Rule.RuleModule = {
 
             return;
           }
-            
+
           if (unalphabetcialUngroupedNode) {
             const groupImportTextRanges: [number, number][] = [];
             const allGroupImportTexts = _.flatMap(
@@ -502,11 +400,7 @@ const rule: Rule.RuleModule = {
               messageId: "alphabeticalItems",
               fix: (fixer) => {
                 const insertAt = 0;
-                const newLines = getNewCodeLines(
-                  allGroupImportTexts,
-                  insertAt,
-                  groupImportTextRanges
-                );
+                const newLines = getNewCodeLines(allGroupImportTexts, insertAt, groupImportTextRanges);
 
                 const fixes: any = [
                   fixer.removeRange([0, lastImportNodeRangeEnd]),
@@ -531,9 +425,7 @@ const getImportsByGroup = (
   importGroups: ImportGroups;
   ungroupedNodes: ImportDeclaration[];
 } => {
-  const importGroupPriorityMap = new Map(
-    options.map(({ groupName }, groupPriority) => [groupName, groupPriority])
-  );
+  const importGroupPriorityMap = new Map(options.map(({ groupName }, groupPriority) => [groupName, groupPriority]));
   const importGroupMap = new Map<string, ImportItem[]>();
   const ungroupedNodeSet = new Set(importNodes);
 
@@ -584,24 +476,16 @@ const getImportsByGroup = (
   };
 };
 
-const composeNewCodeLines = (
-  lines: string[],
-  lasCommentLine: number,
-  lastImportLine: number
-) => (
+const composeNewCodeLines = (lines: string[], lasCommentLine: number, lastImportLine: number) => (
   newLines: string[],
   index: number,
   excludeLineNumbers: [number, number][]
 ) => {
-  const sliceEnd =
-    lastImportLine > lasCommentLine ? lastImportLine : lasCommentLine;
+  const sliceEnd = lastImportLine > lasCommentLine ? lastImportLine : lasCommentLine;
   const importLines = lines.slice(0, sliceEnd);
 
   const filteredLines = _.filter(importLines, (l, i) => {
-    const inRange = _.find(
-      excludeLineNumbers,
-      (range) => i >= range[0] && i <= range[1]
-    );
+    const inRange = _.find(excludeLineNumbers, (range) => i >= range[0] && i <= range[1]);
     return inRange === undefined;
   });
 
@@ -609,12 +493,9 @@ const composeNewCodeLines = (
 
   const trimmedLines = _.filter(filteredLines, (line, index) => {
     const next = index + 1;
-    const emptyLines =
-      _.isEmpty(line) &&
-      _.isEmpty(filteredLines[next]) &&
-      next !== filteredLines.length;
-    const emptyLineBeforeComment =
-      _.isEmpty(line) && _.includes(filteredLines[index - 1], "//");
+    const emptyLines = _.isEmpty(line) && _.isEmpty(filteredLines[next]) && next !== filteredLines.length;
+    const emptyLineBeforeComment = _.isEmpty(line) && _.includes(filteredLines[index - 1], "//");
+
     const lastEmptyLine = _.isEmpty(line) && next === filteredLines.length;
     if (emptyLineBeforeComment) {
       return false;
