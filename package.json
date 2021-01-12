@@ -65,6 +65,7 @@
     ]
   },
   "dependencies": {
+    "@types/jest": "^26.0.20",
     "minimatch": "^3.0.4"
   }
 }

@@ -6,10 +6,10 @@ const tester = new RuleTester({ parserOptions: { ecmaVersion: 2015, sourceType: 
 
 const ruleOptions = [
   [
-    { groupName: "Contexts", pathPatterns: ["contexts/**"] },
-    { groupName: "Hooks", pathPatterns: ["hooks/**"] },
-    { groupName: "Assets", pathPatterns: ["**/*.{svg|jpg|jpeg}"] },
-    { groupName: "Components", pathPatterns: ["components/**/*", "../**", "./**"] },
+    { groupName: "Assets", paths: ["svg", "jpg", "png"] },
+    { groupName: "Contexts", paths: ["contexts"] },
+    { groupName: "Hooks", paths: ["hooks"] },
+    { groupName: "Components", paths: ["components", "containers"] },
   ],
 ];
 
@@ -17,6 +17,9 @@ const messages = {
   ...ruleMessages,
   noGroupComment: (comment: string) => `No comment found for import group "${comment}"`,
 };
+
+const mockDirectory = "/some/path";
+jest.spyOn(process, "cwd").mockReturnValue(mockDirectory);
 
 const runNoGroupCommentTest = () => {
   tester.run("Test noGroupComment rule", rule, {
@@ -29,6 +32,7 @@ import c from 'contexts/someContext';
       `,
         errors: [{ message: messages.noGroupComment("Contexts") }],
         options: ruleOptions,
+        filename: mockDirectory + "/test",
         output: `
 // some comment
 // Contexts
@@ -50,6 +54,7 @@ const runMatchedItemTest = () => {
 import g from "components/g";
       `,
         options: ruleOptions,
+        filename: mockDirectory + "/test",
         errors: [{ message: messages.matchedItem }],
         output: `// Components
 import p from "components/p";
@@ -64,6 +69,7 @@ import g from "components/g";
 import p from "components/p";
       `,
         options: ruleOptions,
+        filename: mockDirectory + "/test",
         errors: [{ message: messages.matchedItem }],
         output: `// Components
 import g from "components/g";
@@ -81,6 +87,7 @@ import s from "services/s";
 import p from "components/p";
       `,
         options: ruleOptions,
+        filename: mockDirectory + "/test",
         errors: [{ message: messages.matchedItem }],
         output: `// Components
 import g from "components/g";
@@ -106,6 +113,7 @@ import u from "hooks/someHook";
 import c from "contexts/someContext";
       `,
         options: ruleOptions,
+        filename: mockDirectory + "/test",
         errors: [{ message: messages.sequentialGroups }],
         output: `// Contexts
 import c from "contexts/someContext";
@@ -118,22 +126,21 @@ import u from "hooks/someHook";
   });
 };
 
-const runSequentialItemsTest = () => {
-  tester.run("Test sequentialItems rule", rule, {
+const runGlobalItemsFirstTest = () => {
+  tester.run("Test globalItemsFirst rule", rule, {
     valid: [],
     invalid: [
       {
         code: `// Components
-import s from "./someSiblingPathComponent";
-import p from "../shared/someParentPathComponent";
+import s from "./someRelativePathComponent";
 import g from "components/someGlobalComponent";
       `,
         options: ruleOptions,
-        errors: [{ message: messages.sequentialItems }],
+        filename: mockDirectory + "/containers/somePage",
+        errors: [{ message: messages.globalItemsFirst }],
         output: `// Components
 import g from "components/someGlobalComponent";
-import p from "../shared/someParentPathComponent";
-import s from "./someSiblingPathComponent";
+import s from "./someRelativePathComponent";
       `,
       },
     ],
@@ -152,6 +159,7 @@ import b1 from "components/a/b1";
 import a from "components/a";
       `,
         options: ruleOptions,
+        filename: mockDirectory + "/test",
         errors: [{ message: messages.alphabeticalItems }],
         output: `// Components
 import a from "components/a";
@@ -166,10 +174,24 @@ import qs from "qs";
 import _ from "lodash";
       `,
         options: ruleOptions,
+        filename: mockDirectory + "/test",
         errors: [{ message: messages.alphabeticalItems }],
         output: `import _ from "lodash";
 import qs from "qs";
 import u from "use-query-params";
+      `,
+      },
+      {
+        code: `// Components
+import s from "./someSiblingPathComponent";
+import p from "../shared/someParentPathComponent";
+      `,
+        options: ruleOptions,
+        filename: mockDirectory + "/containers/someContainer",
+        errors: [{ message: messages.alphabeticalItems }],
+        output: `// Components
+import p from "../shared/someParentPathComponent";
+import s from "./someSiblingPathComponent";
       `,
       },
     ],
@@ -188,6 +210,7 @@ import check from 'dates';
 import c from 'contexts/someContext';
       `,
         options: ruleOptions,
+        filename: mockDirectory + "/test",
         errors: [{ message: messages.firstImport }],
         output: `// Contexts
 import c from 'contexts/someContext';
@@ -212,6 +235,7 @@ import c from 'contexts/someContext';
 import s from 'services/someService';
       `,
         options: ruleOptions,
+        filename: mockDirectory + "/test",
         errors: [{ message: messages.emptyLineAfter }],
         output: `
 // Contexts
@@ -237,6 +261,7 @@ import p from 'data/promotion';
 import c from 'contexts/someContext';
       `,
         options: ruleOptions,
+        filename: mockDirectory + "/test",
         errors: [{ message: messages.emptyLineBefore }],
         output: `
 // unnamed
@@ -261,6 +286,7 @@ import u from "hooks/someHook";
 import l from 'lists/data';
       `,
         options: ruleOptions,
+        filename: mockDirectory + "/test",
         errors: [{ message: messages.ungroupedItems }],
         output: `import l from 'lists/data';
 
@@ -278,12 +304,14 @@ const runValidTest = () => {
       {
         code: ``,
         options: ruleOptions,
+        filename: mockDirectory + "/test",
       },
       {
         code: `
 import { useLocation } from "react-router-dom";
         `,
         options: ruleOptions,
+        filename: mockDirectory + "/test",
       },
       {
         code: `
@@ -293,6 +321,7 @@ import e from "external-module";
 import u from "hooks/someHook";
       `,
         options: ruleOptions,
+        filename: mockDirectory + "/test",
       },
     ],
     invalid: [],
@@ -303,7 +332,7 @@ import u from "hooks/someHook";
   runNoGroupCommentTest();
   runMatchedItemTest();
   runSequentialGroupsTest();
-  runSequentialItemsTest();
+  runGlobalItemsFirstTest();
   runAlphabeticalItemsTest();
   runFirstImportTest();
   runEmptyLineAfterTest();
