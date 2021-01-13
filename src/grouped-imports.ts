@@ -34,6 +34,7 @@ export const ruleMessages = {
 const rule: Rule.RuleModule = {
   meta: {
     fixable: "code",
+    type: "problem",
     schema: [
       {
         type: "array",
