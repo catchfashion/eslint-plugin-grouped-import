@@ -5,12 +5,15 @@ import rule, { ruleMessages } from "../src/grouped-imports";
 const tester = new RuleTester({ parserOptions: { ecmaVersion: 2015, sourceType: "module" } });
 
 const ruleOptions = [
-  [
-    { groupName: "Assets", paths: ["svg", "jpg", "png"] },
-    { groupName: "Contexts", paths: ["contexts"] },
-    { groupName: "Hooks", paths: ["hooks"] },
-    { groupName: "Components", paths: ["components", "containers"] },
-  ],
+  {
+    groups: [
+      { groupName: "Assets", paths: ["svg", "jpg", "png"] },
+      { groupName: "Contexts", paths: ["contexts"] },
+      { groupName: "Hooks", paths: ["hooks"] },
+      { groupName: "Components", paths: ["components", "containers"] },
+    ],
+    ignore: ["styled-components"],
+  },
 ];
 
 const messages = {
@@ -319,6 +322,16 @@ import e from "external-module";
 
 // Hooks
 import u from "hooks/someHook";
+      `,
+        options: ruleOptions,
+        filename: mockDirectory + "/test",
+      },
+      {
+        code: `
+import styled from "styled-components";
+
+// Components
+import c from "components/someComponent";
       `,
         options: ruleOptions,
         filename: mockDirectory + "/test",

@@ -14,10 +14,13 @@ type ImportItem = {
   isRelative: boolean;
 };
 
-type RuleOptions = Array<{
-  groupName: string;
-  paths: string[];
-}>;
+type RuleOptions = {
+  groups: Array<{
+    groupName: string;
+    paths: string[];
+  }>;
+  ignore: string[];
+};
 
 export const ruleMessages = {
   noGroupComment: 'No comment found for import group "{{comment}}"',
@@ -36,22 +39,33 @@ const rule: Rule.RuleModule = {
     fixable: "code",
     schema: [
       {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            groupName: {
-              type: "string",
-            },
-            paths: {
-              type: "array",
-              items: {
-                type: "string",
+        type: "object",
+        properties: {
+          groups: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                groupName: {
+                  type: "string",
+                },
+                paths: {
+                  type: "array",
+                  items: {
+                    type: "string",
+                  },
+                },
               },
+            },
+            additionalProperties: false,
+          },
+          ignore: {
+            type: "array",
+            items: {
+              type: "string",
             },
           },
         },
-        additionalProperties: false,
       },
     ],
     messages: ruleMessages,
@@ -76,7 +90,7 @@ const rule: Rule.RuleModule = {
             context.getFilename().slice(process.cwd().length)
           );
 
-          const commentKeys = options.map(({ groupName }) => groupName);
+          const commentKeys = options.groups.map(({ groupName }) => groupName);
           const sourceCode = context.getSourceCode();
           const lines = sourceCode.lines;
           const lastImportNode = importNodes[importNodes.length - 1];
@@ -430,7 +444,8 @@ const getImportsByGroup = (
   importGroups: ImportGroups;
   ungroupedNodes: ImportDeclaration[];
 } => {
-  const importGroupPriorityMap = new Map(options.map(({ groupName }, groupPriority) => [groupName, groupPriority]));
+  const { groups, ignore } = options;
+  const importGroupPriorityMap = new Map(groups.map(({ groupName }, groupPriority) => [groupName, groupPriority]));
   const importGroupMap = new Map<string, ImportItem[]>();
   const ungroupedNodeSet = new Set(importNodes);
 
@@ -455,7 +470,11 @@ const getImportsByGroup = (
     const isRelative = importValue.startsWith(".");
     const targetFile = isRelative ? path.resolve(currentFileName, importValue).slice(1) : importValue;
 
-    _.some(options, ({ groupName, paths: pathNames }) => {
+    if (_.some(ignore, (ignoreKeyword) => targetFile.includes(ignoreKeyword))) {
+      return;
+    }
+
+    _.some(groups, ({ groupName, paths: pathNames }) => {
       return pathNames.some((pathName) => {
         if (targetFile.includes(pathName)) {
           addItemToGroup(groupName, {
