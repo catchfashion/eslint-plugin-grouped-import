@@ -1,7 +1,7 @@
 import { Rule } from "eslint";
 import { ImportDeclaration, SourceLocation } from "estree";
 import _ from "lodash";
-import minimatch from "minimatch";
+import path from "path";
 
 type ImportGroups = Array<{
   groupName: string;
@@ -11,19 +11,22 @@ type ImportGroups = Array<{
 
 type ImportItem = {
   node: ImportDeclaration;
-  pathPriority: number; // 0 is first
+  isRelative: boolean;
 };
 
-type RuleOptions = Array<{
-  groupName: string;
-  pathPatterns: string[];
-}>;
+type RuleOptions = {
+  groups: Array<{
+    groupName: string;
+    paths: string[];
+  }>;
+  ignore: string[];
+};
 
 export const ruleMessages = {
   noGroupComment: 'No comment found for import group "{{comment}}"',
   matchedItem: "Matched import item should belong to group",
   sequentialGroups: "All import groups must be sequential",
-  sequentialItems: "All import items in a group must be sequential",
+  globalItemsFirst: "Global import items in a group must be first",
   alphabeticalItems: "All import items with the same priority in a group must be alphabetical",
   firstImport: "First import in a group must be preceded by a group comment",
   emptyLineBefore: "Import group comment must be preceded by an empty line",
@@ -36,22 +39,33 @@ const rule: Rule.RuleModule = {
     fixable: "code",
     schema: [
       {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            groupName: {
-              type: "string",
-            },
-            pathPatterns: {
-              type: "array",
-              items: {
-                type: "string",
+        type: "object",
+        properties: {
+          groups: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                groupName: {
+                  type: "string",
+                },
+                paths: {
+                  type: "array",
+                  items: {
+                    type: "string",
+                  },
+                },
               },
+            },
+            additionalProperties: false,
+          },
+          ignore: {
+            type: "array",
+            items: {
+              type: "string",
             },
           },
         },
-        additionalProperties: false,
       },
     ],
     messages: ruleMessages,
@@ -70,9 +84,13 @@ const rule: Rule.RuleModule = {
           // check if there are imports from config
 
           const importComments = node.comments ? node.comments : [];
-          const { importGroups, ungroupedNodes } = getImportsByGroup(options, importNodes);
+          const { importGroups, ungroupedNodes } = getImportsByGroup(
+            options,
+            importNodes,
+            context.getFilename().slice(process.cwd().length)
+          );
 
-          const commentKeys = options.map(({ groupName }) => groupName);
+          const commentKeys = options.groups.map(({ groupName }) => groupName);
           const sourceCode = context.getSourceCode();
           const lines = sourceCode.lines;
           const lastImportNode = importNodes[importNodes.length - 1];
@@ -197,13 +215,13 @@ const rule: Rule.RuleModule = {
               }
 
               const unsequentialItem = imports.find((next, index) => {
-                return index !== 0 && imports[index - 1].pathPriority > next.pathPriority;
+                return index !== 0 && imports[index - 1].isRelative && !next.isRelative;
               });
 
               if (unsequentialItem) {
                 const groupImportTextRanges: [number, number][] = [];
                 const allGroupImportTexts = _.flatMap(
-                  unsequentialItem ? _.sortBy(imports, (g) => g.pathPriority) : imports,
+                  unsequentialItem ? _.sortBy(imports, (g) => g.isRelative) : imports,
                   (g) => {
                     const start = (g.node.loc as SourceLocation).start.line - 1;
                     const end = (g.node.loc as SourceLocation).end.line;
@@ -214,7 +232,7 @@ const rule: Rule.RuleModule = {
 
                 context.report({
                   node: unsequentialItem.node,
-                  messageId: "sequentialItems",
+                  messageId: "globalItemsFirst",
                   fix: (fixer) => {
                     const insertAt = (importComment.loc as SourceLocation).end.line;
                     const newLines = getNewCodeLines(allGroupImportTexts, insertAt, groupImportTextRanges);
@@ -235,7 +253,7 @@ const rule: Rule.RuleModule = {
                   return false;
                 }
                 const prev = imports[index - 1];
-                if (prev.pathPriority !== next.pathPriority) {
+                if (prev.isRelative !== next.isRelative) {
                   return false;
                 }
                 return (prev.node.source.value as string) > (next.node.source.value as string);
@@ -246,7 +264,7 @@ const rule: Rule.RuleModule = {
                 const allGroupImportTexts = _.flatMap(
                   _.sortBy(
                     imports,
-                    (i) => i.pathPriority,
+                    (i) => i.isRelative,
                     (i) => i.node.source.value
                   ),
                   (g) => {
@@ -420,12 +438,14 @@ const rule: Rule.RuleModule = {
 
 const getImportsByGroup = (
   options: RuleOptions,
-  importNodes: ImportDeclaration[]
+  importNodes: ImportDeclaration[],
+  currentFileName: string
 ): {
   importGroups: ImportGroups;
   ungroupedNodes: ImportDeclaration[];
 } => {
-  const importGroupPriorityMap = new Map(options.map(({ groupName }, groupPriority) => [groupName, groupPriority]));
+  const { groups, ignore } = options;
+  const importGroupPriorityMap = new Map(groups.map(({ groupName }, groupPriority) => [groupName, groupPriority]));
   const importGroupMap = new Map<string, ImportItem[]>();
   const ungroupedNodeSet = new Set(importNodes);
 
@@ -433,7 +453,7 @@ const getImportsByGroup = (
     groupName: string,
     item: {
       node: ImportDeclaration;
-      pathPriority: number;
+      isRelative: boolean;
     }
   ) {
     const prevImports = importGroupMap.get(groupName);
@@ -447,12 +467,19 @@ const getImportsByGroup = (
 
   importNodes.forEach((node) => {
     const importValue = node.source.value as string;
-    _.some(options, ({ groupName, pathPatterns }) => {
-      return pathPatterns.some((pattern, pathPriority) => {
-        if (minimatch(importValue, pattern)) {
+    const isRelative = importValue.startsWith(".");
+    const targetFile = isRelative ? path.resolve(currentFileName, importValue).slice(1) : importValue;
+
+    if (_.some(ignore, (ignoreKeyword) => targetFile.includes(ignoreKeyword))) {
+      return;
+    }
+
+    _.some(groups, ({ groupName, paths: pathNames }) => {
+      return pathNames.some((pathName) => {
+        if (targetFile.includes(pathName)) {
           addItemToGroup(groupName, {
             node,
-            pathPriority,
+            isRelative,
           });
           return true;
         }
