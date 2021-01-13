@@ -468,7 +468,7 @@ const getImportsByGroup = (
   importNodes.forEach((node) => {
     const importValue = node.source.value as string;
     const isRelative = importValue.startsWith(".");
-    const targetFile = isRelative ? path.resolve(currentFileName, importValue).slice(1) : importValue;
+    const targetFile = isRelative ? path.resolve(currentFileName, "../", importValue).slice(1) : importValue;
 
     if (_.some(ignore, (ignoreKeyword) => targetFile.includes(ignoreKeyword))) {
       return;
