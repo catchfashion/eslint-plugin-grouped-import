@@ -186,15 +186,19 @@ import u from "use-query-params";
       },
       {
         code: `// Components
-import s from "./someSiblingPathComponent";
-import p from "../shared/someParentPathComponent";
+import ss from "./productCard/productImage";
+import s from "./productCard";
+import p from "../PostList";
+import g from "../../components/carousel";
       `,
         options: ruleOptions,
-        filename: mockDirectory + "/containers/someContainer",
+        filename: mockDirectory + "/containers/PostShow/index.html",
         errors: [{ message: messages.alphabeticalItems }],
         output: `// Components
-import p from "../shared/someParentPathComponent";
-import s from "./someSiblingPathComponent";
+import g from "../../components/carousel";
+import p from "../PostList";
+import s from "./productCard";
+import ss from "./productCard/productImage";
       `,
       },
     ],
@@ -335,6 +339,14 @@ import c from "components/someComponent";
       `,
         options: ruleOptions,
         filename: mockDirectory + "/test",
+      },
+      {
+        code: `
+// Components
+import c from "../index";
+      `,
+        options: ruleOptions,
+        filename: mockDirectory + "/containers/someContainer/hooks/someHook",
       },
     ],
     invalid: [],
